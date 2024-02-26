@@ -9,8 +9,11 @@ import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.ReportFragment.Companion.reportFragment
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.model.LatLng
 import com.google.android.material.snackbar.Snackbar
 import kr.co.lion.android01.practice_lbs.databinding.ActivitySettingBinding
 
@@ -24,6 +27,9 @@ class SettingActivity : AppCompatActivity() {
     //위치 측정이 성공하면 동작할 리스너
     var gpsLocationListener:MyLocationListener? = null
     var networkLocationListener:MyLocationListener? = null
+
+    //구글 지도 객체를 담을 프로퍼티
+    lateinit var mainGoogleMap: GoogleMap
 
     //확인할 권한 목록
     var permissionList = arrayOf(
@@ -39,6 +45,9 @@ class SettingActivity : AppCompatActivity() {
         activitySettingBinding = ActivitySettingBinding.inflate(layoutInflater)
         setContentView(activitySettingBinding.root)
 
+        settingGoogleMap()
+        setToolBar()
+
         //권한을 확인받는다
         requestPermissions(permissionList, 0)
     }
@@ -51,6 +60,8 @@ class SettingActivity : AppCompatActivity() {
                 inflateMenu(R.menu.set_menu)
                 //메뉴를 클릭했을 떄
                 setOnMenuItemClickListener {
+                    //현재 위치를 다시 측정한다
+                    getMyLocation()
 
                     true
                 }
@@ -65,6 +76,18 @@ class SettingActivity : AppCompatActivity() {
         //리스너를 설정한다
         //구글 지도 사용이 완료되면 동작한다
         supportMapFragment.getMapAsync {
+
+            //구글 지도 객체를 가져온다
+            mainGoogleMap = it
+
+            //확대 축소 버튼 설정
+            mainGoogleMap.uiSettings.isZoomControlsEnabled = true
+
+            //현재 위치로 이동 시키는 버튼을 둔다
+            mainGoogleMap.isMyLocationEnabled = true
+
+            //그 아이콘을 지우고 싶다면?
+            mainGoogleMap.uiSettings.isMyLocationButtonEnabled = false
 
             //위치 정보를 관리하는 객체를 가져온다 그니까 즉 초기화도 해준다
             locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
@@ -139,6 +162,8 @@ class SettingActivity : AppCompatActivity() {
                 //NetWork 프로바이더라면?
                 LocationManager.NETWORK_PROVIDER -> {
                     //newWork 리스너 연결을 해제 해준다
+                    locationManager.removeUpdates(networkLocationListener!!)
+                    networkLocationListener = null
 
                 }
             }
@@ -152,6 +177,19 @@ class SettingActivity : AppCompatActivity() {
     fun setMyLocation(location: Location){
         //위도와 경도를 출력한다
         Snackbar.make(activitySettingBinding.root, "위도 : ${location.latitude}, 경도 : ${location.longitude}", Snackbar.LENGTH_SHORT).show()
+
+        //위도와 경도를 관리하는 객체를 생성한다
+        //위도 : location.latitude
+        //경도 : location.longitude
+        var userLocation = LatLng(location.latitude, location.longitude)
+
+        //지도를 이동시키기 위한 객체를 생성한다
+        //첫 번째 : 표시할 지도의 위치
+        //두 번째 : 줌 배율!
+        var cameraUpdate = CameraUpdateFactory.newLatLngZoom(userLocation, 18.0f)
+
+        //카메라를 이동 시킨다
+        mainGoogleMap.animateCamera(cameraUpdate)
     }
 }
 
