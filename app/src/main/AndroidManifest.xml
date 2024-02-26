@@ -27,10 +27,22 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <provider
+            android:authorities="kr.co.lion.android01.practice_lbs.file_provider"
+            android:name="androidx.core.content.FileProvider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/pref"/>
+        </provider>
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyAm4sYyDiXZEjMj0Jjvykn7Opiu9nxr4NE" />
     </application>
+
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION"/>
 
 </manifest>
