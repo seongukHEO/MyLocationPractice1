@@ -8,12 +8,14 @@ import android.location.LocationListener
 import android.location.LocationManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.Marker
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import kr.co.lion.android01.practice_lbs.databinding.ActivitySettingBinding
@@ -46,6 +48,19 @@ class SettingActivity : AppCompatActivity() {
         Manifest.permission.ACCESS_FINE_LOCATION,
         Manifest.permission.ACCESS_COARSE_LOCATION
     )
+
+    //서버로부터 받아온 데이터를 담을 리스트
+    //위도
+    var latitudeList = mutableListOf<Double>()
+    //경도
+    var longitudeList = mutableListOf<Double>()
+    //이름
+    var nameList = mutableListOf<String>()
+    //대략적인 주소
+    var vicinityList = mutableListOf<String>()
+
+    //주변 장소를 표시한 마커들을 담을 리스트
+    var markerList = mutableListOf<Marker>()
 
     //강사님이 만들어주신 데이터 가져오기
     var diaLogData = arrayOf(
@@ -288,84 +303,119 @@ class SettingActivity : AppCompatActivity() {
                     //ApiKey
                     var apiKey = "AIzaSyDrmc7u6pc_C_NnuO1Ok1ICCmiK6Vl0Xds"
 
-                    //접속할 주소
-                    var serverPath = "${site}?location=${location}&radius=${radius}&language=${language}&key=${apiKey}"
-                    //Log.d("test1234", serverPath)
-
-                    //서버에 접속한다
-                    var url = URL(serverPath)
-                    var httpURLConnection = url.openConnection() as HttpURLConnection
-
-                    //스트림을 생성한다
-                    var inputStreamReader = InputStreamReader(httpURLConnection.inputStream)
-
-                    //라인 단위로 문자열을 읽어오는 스트림
-                    //장문의 문자열을 한 줄씩 읽어오는 것 --> BufferedReader
-                    var bufferedReader = BufferedReader(inputStreamReader)
-
-                    //읽어온 한 줄의 문자열을 담을 변수
-                    var str:String? = null
-
-                    //읽어온 문장들을 누적해서 담을 객체
-                    var stringBuffer = StringBuffer()
-
-                    //처음부터 마지막까지 읽어온다
-                    //그러고 이 페이지가 더이상 읽어올 것이 없다면 null이 반환되고 반복문을 멈춘다
+                    //마지막까지 읽어온다
+                    //더이상 읽어올 페이지가 없다면 null을 반환한다!
                     do {
-                        //한줄의 문자열을 읽어온다
-                        str = bufferedReader.readLine()
+                        //너무 많은 양의 데이터를 한 번에 받아오면 오류가 나기 때문에 딜레이 타임을 준다
+                        SystemClock.sleep(2000)
+                        //다음 페이지의 데이터를 요청하기 위한 토큰
+                        var pagetoken: String? = null
 
-                        if (str != null){
-                            //stringBuffer에 누적 시켜준다
-                            stringBuffer.append(str)
+                        //접속할 주소
+                        // 매개변수로 전달되는 type이 all이 아니라면 type을 붙혀준다
+                        var serverPath = if (type == "all") {
+                            //type을 붙혀주지 않는다
+                            "${site}?location=${location}&radius=${radius}&language=${language}&key=${apiKey}"
+                        } else {
+                            //type을 붙혀준다
+                            "${site}?location=${location}&radius=${radius}&language=${language}&key=${apiKey}&type${type}"
+                        }
+                        //Log.d("test1234", serverPath)
+
+                        //그니까 토큰이 있다면 위의 접속할 주소에 계속해서 다음 토큰을 넣어주고
+                        //pagetoken이 null이라면 그냥 접속할 주소를 보여준다
+                        var serverPath2 = if (pagetoken != null){
+                            "${serverPath}&pagetoken=${pagetoken}"
+                        }else{
+                            serverPath
                         }
 
-                    }while (str != null)
+                        //서버에 접속한다
+                        var url = URL(serverPath2)
+                        var httpURLConnection = url.openConnection() as HttpURLConnection
 
-                    //전체가 {}이므로 JSONObject를 생성한다 --> 객체
-                    //만약 전체가 []이면 JSONArray를 사용한다 --> 리스트
-                    var root = JSONObject(stringBuffer.toString())
+                        //스트림을 생성한다
+                        var inputStreamReader = InputStreamReader(httpURLConnection.inputStream)
 
-                    //status값이 OK인 경우 데이터를 가져온다
-                    if (root.has("status")){
-                        var status = root.getString("status")
+                        //라인 단위로 문자열을 읽어오는 스트림
+                        //장문의 문자열을 한 줄씩 읽어오는 것 --> BufferedReader
+                        var bufferedReader = BufferedReader(inputStreamReader)
 
-                        //status가 OK라면
-                        if (status == "OK"){
-                            //웹 사이트를 보면서하자!!
-                            var resultArray = root.getJSONArray("results")
+                        //읽어온 한 줄의 문자열을 담을 변수
+                        var str: String? = null
 
-                            //처음부터 끝까지 반복한다
-                            for (idx in 0 until resultArray.length()){
+                        //읽어온 문장들을 누적해서 담을 객체
+                        var stringBuffer = StringBuffer()
 
-                                //idx번째 JSON 객체를 가져온다
-                                var resultsObject = resultArray[idx] as JSONObject
+                        //처음부터 마지막까지 읽어온다
+                        //그러고 이 페이지가 더이상 읽어올 것이 없다면 null이 반환되고 반복문을 멈춘다
+                        do {
+                            //한줄의 문자열을 읽어온다
+                            str = bufferedReader.readLine()
 
-                                //geometry 이름으로 객체를 가져온다
-                                var geometryObject = resultsObject.getJSONObject("geometry")
-
-                                //location 이름으로 객체를 가져온다
-                                var locationObject = geometryObject.getJSONObject("location")
-
-                                //위도를 가져온다
-                                var lat = locationObject.getDouble("lat")
-                                //경도를 가져온다
-                                var lng = locationObject.getDouble("lng")
-
-                                //이름을 가져온다
-                                var name = resultsObject.getString("name")
-                                //대략적 주소를 가져온다
-                                var vicinity = resultsObject.getString("vicinity")
+                            if (str != null) {
+                                //stringBuffer에 누적 시켜준다
+                                stringBuffer.append(str)
                             }
-                        }else{
+
+                        } while (str != null)
+
+                        //전체가 {}이므로 JSONObject를 생성한다 --> 객체
+                        //만약 전체가 []이면 JSONArray를 사용한다 --> 리스트
+                        var root = JSONObject(stringBuffer.toString())
+
+                        //status값이 OK인 경우 데이터를 가져온다
+                        if (root.has("status")) {
+                            var status = root.getString("status")
+
+                            //status가 OK라면
+                            if (status == "OK") {
+                                //웹 사이트를 보면서하자!!
+                                var resultArray = root.getJSONArray("results")
+
+                                //처음부터 끝까지 반복한다
+                                for (idx in 0 until resultArray.length()) {
+
+                                    //idx번째 JSON 객체를 가져온다
+                                    var resultsObject = resultArray[idx] as JSONObject
+
+                                    //geometry 이름으로 객체를 가져온다
+                                    var geometryObject = resultsObject.getJSONObject("geometry")
+
+                                    //location 이름으로 객체를 가져온다
+                                    var locationObject = geometryObject.getJSONObject("location")
+
+                                    //위도를 가져온다
+                                    var lat = locationObject.getDouble("lat")
+                                    //경도를 가져온다
+                                    var lng = locationObject.getDouble("lng")
+
+                                    //이름을 가져온다
+                                    var name = resultsObject.getString("name")
+                                    //대략적 주소를 가져온다
+                                    var vicinity = resultsObject.getString("vicinity")
+                                }
+
+                                //next_page_token이 있다면?!
+                                if (root.has("next_page_token")){
+                                    //토큰값을 담아준다
+                                    pagetoken = root.getString("next_page_token")
+                                }else{
+                                    //null을 넣어준다
+                                    //do while의 조건식이 토큰이 null이 아닐 경우 이므로
+                                    //null을 넣어서 반복을 중단 시킨다
+                                    pagetoken = null
+                                }
+
+                            } else {
+                                showDataError()
+                            }
+
+                        } else {
                             showDataError()
                         }
-
-                    }else{
-                        showDataError()
-                    }
-
-
+                        //요기 요기가 null이어야 반복문이 멈춘다
+                    }while (pagetoken != null)
 
                 }
             }
