@@ -16,6 +16,7 @@ import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.Marker
+import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import kr.co.lion.android01.practice_lbs.databinding.ActivitySettingBinding
@@ -60,6 +61,7 @@ class SettingActivity : AppCompatActivity() {
     var vicinityList = mutableListOf<String>()
 
     //주변 장소를 표시한 마커들을 담을 리스트
+    //나중에 마커를 삭제하기 위해서 필요
     var markerList = mutableListOf<Marker>()
 
     //강사님이 만들어주신 데이터 가져오기
@@ -138,6 +140,7 @@ class SettingActivity : AppCompatActivity() {
                         }
                         //마커들을 초기화 하기
                         R.id.main_menu_clear -> {
+                            initPlaceData()
 
                         }
                     }
@@ -303,14 +306,21 @@ class SettingActivity : AppCompatActivity() {
                     //ApiKey
                     var apiKey = "AIzaSyDrmc7u6pc_C_NnuO1Ok1ICCmiK6Vl0Xds"
 
+                    //다음 페이지의 데이터를 요청하기 위한 토큰
+                    var pagetoken: String? = null
+
+                    //지도에 표시되어있는 마커를 제거하고 데이터를 담는 리스트를 초기화한다
+                    //ui에 관련된 것들 즉 화면에 관련된 것들은 모두 runOnUiThread 안에 작성을 해주어야 한다
+                    runOnUiThread {
+                        initPlaceData()
+                    }
+
+
                     //마지막까지 읽어온다
                     //더이상 읽어올 페이지가 없다면 null을 반환한다!
                     do {
                         //너무 많은 양의 데이터를 한 번에 받아오면 오류가 나기 때문에 딜레이 타임을 준다
                         SystemClock.sleep(2000)
-                        //다음 페이지의 데이터를 요청하기 위한 토큰
-                        var pagetoken: String? = null
-
                         //접속할 주소
                         // 매개변수로 전달되는 type이 all이 아니라면 type을 붙혀준다
                         var serverPath = if (type == "all") {
@@ -394,6 +404,12 @@ class SettingActivity : AppCompatActivity() {
                                     var name = resultsObject.getString("name")
                                     //대략적 주소를 가져온다
                                     var vicinity = resultsObject.getString("vicinity")
+
+                                    //데이터들을 리스트에 담는다
+                                    latitudeList.add(lat)
+                                    longitudeList.add(lng)
+                                    nameList.add(name)
+                                    vicinityList.add(vicinity)
                                 }
 
                                 //next_page_token이 있다면?!
@@ -417,6 +433,28 @@ class SettingActivity : AppCompatActivity() {
                         //요기 요기가 null이어야 반복문이 멈춘다
                     }while (pagetoken != null)
 
+                    //마커를 찍는다 이 또한 화면에 관련된 작업이므로 runOnUiThread에 작성해준다
+                    runOnUiThread {
+                        //지도에 마커를 표시해준다
+                        for (idx in 0 until latitudeList.size){
+                            //마커 옵션을 만들어준다
+                            //즉 마커를 만들건데 그 위치의 위도와 경도를 파악해서 마커를 찍어준다
+                            var placeMarkerOptions = MarkerOptions()
+                            var placeLatLng = LatLng(latitudeList[idx], longitudeList[idx])
+                            placeMarkerOptions.position(placeLatLng)
+
+                            //말풍선의 타이틀
+                            placeMarkerOptions.title(nameList[idx])
+                            //말풍선의 내용
+                            placeMarkerOptions.snippet(vicinityList[idx])
+
+                            //마커를 찍어준다
+                            var placeMarker = mainGoogleMap.addMarker(placeMarkerOptions)
+                            //제거를 위해 리스트에 담아준다
+                            markerList.add(placeMarker!!)
+                        }
+                    }
+
                 }
             }
 
@@ -429,6 +467,20 @@ class SettingActivity : AppCompatActivity() {
     //에러가 났을 때 SnackBar를 보여줄 함수를 하나 만든다
     fun showDataError(){
         Snackbar.make(activitySettingBinding.root, "일시적인 네트워크 오류입니다", Snackbar.LENGTH_SHORT).show()
+    }
+
+    //지도에 표시되어있는 마커를 제거하고 모든 리스트를 초기화한다
+    fun initPlaceData(){
+        //리스트에 있는 마커의 갯수만큼 반복한다
+        markerList.forEach {
+            it.remove()
+        }
+        //리스트를 초기화한다
+        latitudeList.clear()
+        longitudeList.clear()
+        nameList.clear()
+        vicinityList.clear()
+        markerList.clear()
     }
 
 }
