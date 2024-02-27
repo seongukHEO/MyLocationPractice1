@@ -7,4 +7,14 @@
         android:icon="@android:drawable/ic_menu_mylocation"
         android:title="내 위치"
         app:showAsAction="always" />
+    <item
+        android:id="@+id/main_menu_place"
+        android:icon="@drawable/panorama_24px"
+        android:title="장소 선택"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/main_menu_clear"
+        android:icon="@drawable/restart_alt_24px"
+        android:title="초기화"
+        app:showAsAction="always" />
 </menu>

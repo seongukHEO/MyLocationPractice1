@@ -1,6 +1,7 @@
 package kr.co.lion.android01.practice_lbs
 
 import android.Manifest
+import android.content.DialogInterface
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
@@ -8,14 +9,20 @@ import android.location.LocationManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import androidx.core.app.ActivityCompat
-import androidx.lifecycle.ReportFragment.Companion.reportFragment
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import kr.co.lion.android01.practice_lbs.databinding.ActivitySettingBinding
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.concurrent.thread
 
 class SettingActivity : AppCompatActivity() {
 
@@ -31,10 +38,41 @@ class SettingActivity : AppCompatActivity() {
     //구글 지도 객체를 담을 프로퍼티
     lateinit var mainGoogleMap: GoogleMap
 
+    //현재 사용자 위치를 가지고 있는 객체
+    var userLocation:Location? = null
+
     //확인할 권한 목록
     var permissionList = arrayOf(
         Manifest.permission.ACCESS_FINE_LOCATION,
         Manifest.permission.ACCESS_COARSE_LOCATION
+    )
+
+    //강사님이 만들어주신 데이터 가져오기
+    var diaLogData = arrayOf(
+        "all",
+        "accounting", "airport", "amusement_park",
+        "aquarium", "art_gallery", "atm", "bakery",
+        "bank", "bar", "beauty_salon", "bicycle_store",
+        "book_store", "bowling_alley", "bus_station",
+        "cafe", "campground", "car_dealer", "car_rental",
+        "car_repair", "car_wash", "casino", "cemetery",
+        "church", "city_hall", "clothing_store", "convenience_store",
+        "courthouse", "dentist", "department_store", "doctor",
+        "drugstore", "electrician", "electronics_store", "embassy",
+        "fire_station", "florist", "funeral_home", "furniture_store",
+        "gas_station", "gym", "hair_care", "hardware_store", "hindu_temple",
+        "home_goods_store", "hospital", "insurance_agency",
+        "jewelry_store", "laundry", "lawyer", "library", "light_rail_station",
+        "liquor_store", "local_government_office", "locksmith", "lodging",
+        "meal_delivery", "meal_takeaway", "mosque", "movie_rental", "movie_theater",
+        "moving_company", "museum", "night_club", "painter", "park", "parking",
+        "pet_store", "pharmacy", "physiotherapist", "plumber", "police", "post_office",
+        "primary_school", "real_estate_agency", "restaurant", "roofing_contractor",
+        "rv_park", "school", "secondary_school", "shoe_store", "shopping_mall",
+        "spa", "stadium", "storage", "store", "subway_station", "supermarket",
+        "synagogue", "taxi_stand", "tourist_attraction", "train_station",
+        "transit_station", "travel_agency", "university", "eterinary_care", "zoo"
+
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,8 +98,34 @@ class SettingActivity : AppCompatActivity() {
                 inflateMenu(R.menu.set_menu)
                 //메뉴를 클릭했을 떄
                 setOnMenuItemClickListener {
-                    //현재 위치를 다시 측정한다
-                    getMyLocation()
+                    when(it.itemId){
+                        R.id.set_menu_location -> {
+                            //현재 위치를 다시 측정한다
+                            getMyLocation()
+                        }
+                        //주변 정보 가져와서 다이아로그에 띄우기
+                        R.id.main_menu_place -> {
+                            //다이알로그를 띄워준다
+                            var materialAlertDialogBuilder = MaterialAlertDialogBuilder(this@SettingActivity)
+                            materialAlertDialogBuilder.setTitle("장소 종류 선택")
+                            materialAlertDialogBuilder.setNegativeButton("취소", null)
+
+                            //람다를 사용해준다
+                            materialAlertDialogBuilder.setItems(diaLogData){ dialogInterface: DialogInterface, i: Int ->
+                                //주변 정보를 가져온다
+                                //그니까 DiaLog를 클릭했을 떄 사용자가 누른 순서값을 가져온다
+                                //매개변수에는 i번째(사용자가 선택한 항목의 순서값) 문자열을 전달해준다
+                                getPlaceData(diaLogData[i])
+                            }
+
+
+                            materialAlertDialogBuilder.show()
+                        }
+                        //마커들을 초기화 하기
+                        R.id.main_menu_clear -> {
+
+                        }
+                    }
 
                     true
                 }
@@ -178,6 +242,9 @@ class SettingActivity : AppCompatActivity() {
         //위도와 경도를 출력한다
         Snackbar.make(activitySettingBinding.root, "위도 : ${location.latitude}, 경도 : ${location.longitude}", Snackbar.LENGTH_SHORT).show()
 
+        //현재 사용자의 위치를 프로퍼티에 담아준다
+        userLocation = location
+
         //위도와 경도를 관리하는 객체를 생성한다
         //위도 : location.latitude
         //경도 : location.longitude
@@ -191,6 +258,129 @@ class SettingActivity : AppCompatActivity() {
         //카메라를 이동 시킨다
         mainGoogleMap.animateCamera(cameraUpdate)
     }
+
+    //주변 정보를 가져온다
+    fun getPlaceData(type:String){
+        //매개변수로 받는 타입은 위에 변수로 저장해둔 diaLogData 내용들이다!
+        //안드로이드는 네트워크에 대한 코드는 모두 Thread로 운영하는 것을 강제한다
+        //모바일 네트워크는 오류가 발생할 가능성이 매우 매우 크기 때문에 오류가 발생 하더라도
+        //어플이 종료되는 것을 방지하기 위함이다!
+
+        //예외처리
+        try {
+            //Thread를 가동시킨다
+            thread {
+                //사용자의 위치를 받은 적이 있다면?!
+                if (userLocation != null){
+                    //접속할 서버의 주소
+                    var site = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+
+                    //사용자의 위치
+                    //와 여기 띄어쓰기 조심하자,, ㅋㅋ 한참 해맷네
+                    var location = "${userLocation?.latitude},${userLocation?.longitude}"
+
+                    //반경
+                    var radius = 5000
+
+                    //언어
+                    var language = "ko"
+
+                    //ApiKey
+                    var apiKey = "AIzaSyDrmc7u6pc_C_NnuO1Ok1ICCmiK6Vl0Xds"
+
+                    //접속할 주소
+                    var serverPath = "${site}?location=${location}&radius=${radius}&language=${language}&key=${apiKey}"
+                    //Log.d("test1234", serverPath)
+
+                    //서버에 접속한다
+                    var url = URL(serverPath)
+                    var httpURLConnection = url.openConnection() as HttpURLConnection
+
+                    //스트림을 생성한다
+                    var inputStreamReader = InputStreamReader(httpURLConnection.inputStream)
+
+                    //라인 단위로 문자열을 읽어오는 스트림
+                    //장문의 문자열을 한 줄씩 읽어오는 것 --> BufferedReader
+                    var bufferedReader = BufferedReader(inputStreamReader)
+
+                    //읽어온 한 줄의 문자열을 담을 변수
+                    var str:String? = null
+
+                    //읽어온 문장들을 누적해서 담을 객체
+                    var stringBuffer = StringBuffer()
+
+                    //처음부터 마지막까지 읽어온다
+                    //그러고 이 페이지가 더이상 읽어올 것이 없다면 null이 반환되고 반복문을 멈춘다
+                    do {
+                        //한줄의 문자열을 읽어온다
+                        str = bufferedReader.readLine()
+
+                        if (str != null){
+                            //stringBuffer에 누적 시켜준다
+                            stringBuffer.append(str)
+                        }
+
+                    }while (str != null)
+
+                    //전체가 {}이므로 JSONObject를 생성한다 --> 객체
+                    //만약 전체가 []이면 JSONArray를 사용한다 --> 리스트
+                    var root = JSONObject(stringBuffer.toString())
+
+                    //status값이 OK인 경우 데이터를 가져온다
+                    if (root.has("status")){
+                        var status = root.getString("status")
+
+                        //status가 OK라면
+                        if (status == "OK"){
+                            //웹 사이트를 보면서하자!!
+                            var resultArray = root.getJSONArray("results")
+
+                            //처음부터 끝까지 반복한다
+                            for (idx in 0 until resultArray.length()){
+
+                                //idx번째 JSON 객체를 가져온다
+                                var resultsObject = resultArray[idx] as JSONObject
+
+                                //geometry 이름으로 객체를 가져온다
+                                var geometryObject = resultsObject.getJSONObject("geometry")
+
+                                //location 이름으로 객체를 가져온다
+                                var locationObject = geometryObject.getJSONObject("location")
+
+                                //위도를 가져온다
+                                var lat = locationObject.getDouble("lat")
+                                //경도를 가져온다
+                                var lng = locationObject.getDouble("lng")
+
+                                //이름을 가져온다
+                                var name = resultsObject.getString("name")
+                                //대략적 주소를 가져온다
+                                var vicinity = resultsObject.getString("vicinity")
+                            }
+                        }else{
+                            showDataError()
+                        }
+
+                    }else{
+                        showDataError()
+                    }
+
+
+
+                }
+            }
+
+        }catch (e:Exception){
+            showDataError()
+        }
+
+    }
+
+    //에러가 났을 때 SnackBar를 보여줄 함수를 하나 만든다
+    fun showDataError(){
+        Snackbar.make(activitySettingBinding.root, "일시적인 네트워크 오류입니다", Snackbar.LENGTH_SHORT).show()
+    }
+
 }
 
 
